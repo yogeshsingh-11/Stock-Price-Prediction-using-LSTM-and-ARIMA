@@ -8,19 +8,16 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, LSTM
 import streamlit as st
 
-# Function to fetch stock data from Yahoo Finance
 def fetch_stock_data(ticker, start_date, end_date):
     stock_data = yf.download(ticker, start=start_date, end=end_date)
     return stock_data['Close']
 
-# ARIMA Model
 def arima_model(train_data):
-    model = ARIMA(train_data, order=(5, 1, 0))  # p=5, d=1, q=0 (you can fine-tune these values)
+    model = ARIMA(train_data, order=(5, 1, 0))  # p=5, d=1, q=0 (can be fine-tuned later)
     model_fit = model.fit()
     forecast = model_fit.forecast(steps=30)  # Forecasting the next 30 days
     return forecast
 
-# LSTM Model
 def lstm_model(train_data, future_days=30):
     # Data scaling
     scaler = MinMaxScaler(feature_range=(0, 1))
@@ -48,12 +45,20 @@ def lstm_model(train_data, future_days=30):
     model.fit(X_train, y_train, epochs=10, batch_size=32)
 
     # Predict the next 30 days
-    test_data = train_scaled[-60:].reshape(1, -1)
-    test_data = test_data.reshape((test_data.shape[0], test_data.shape[1], 1))
-    prediction = model.predict(test_data)
-    prediction = scaler.inverse_transform(prediction)
+    last_data = train_scaled[-60:].reshape(1, -1)  # Last 60 days for prediction
+    last_data = last_data.reshape((last_data.shape[0], last_data.shape[1], 1))
+    
+    # Make predictions for future days
+    lstm_predictions = []
+    for _ in range(future_days):
+        prediction = model.predict(last_data)
+        lstm_predictions.append(prediction[0, 0])
+        last_data = np.append(last_data[:, 1:, :], prediction.reshape(1, 1, 1), axis=1)
 
-    return prediction
+    # Inverse transform the predictions to the original scale
+    lstm_predictions = scaler.inverse_transform(np.array(lstm_predictions).reshape(-1, 1))
+
+    return lstm_predictions.flatten()
 
 # Streamlit Web Application
 def main():
@@ -88,7 +93,7 @@ def main():
         fig, ax = plt.subplots(1, 1, figsize=(10, 5))
         ax.plot(stock_data.index, stock_data.values, label='Historical Prices', color='blue')  # Actual data
         ax.plot(forecast_dates, arima_forecast, label='ARIMA Prediction', color='green')  # ARIMA forecast
-        ax.plot(forecast_dates, lstm_forecast.flatten(), label='LSTM Prediction', color='red')  # LSTM forecast
+        ax.plot(forecast_dates, lstm_forecast, label='LSTM Prediction', color='red')  # LSTM forecast
 
         ax.set_title(f'{ticker} Price Prediction')
         ax.set_xlabel('Date')
@@ -96,9 +101,10 @@ def main():
         ax.legend()
         st.pyplot(fig)
 
+
         # Display Performance Metrics
         arima_rmse = np.sqrt(np.mean((arima_forecast - test_data.values[:30])**2))
-        lstm_rmse = np.sqrt(np.mean((lstm_forecast.flatten() - test_data.values[:30])**2))
+        lstm_rmse = np.sqrt(np.mean((lstm_forecast - test_data.values[:30])**2))
 
         st.write(f"ARIMA RMSE: {arima_rmse}")
         st.write(f"LSTM RMSE: {lstm_rmse}")
