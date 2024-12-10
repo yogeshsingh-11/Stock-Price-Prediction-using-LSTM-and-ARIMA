@@ -8,16 +8,19 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, LSTM
 import streamlit as st
 
+# Function to fetch stock data from Yahoo Finance
 def fetch_stock_data(ticker, start_date, end_date):
     stock_data = yf.download(ticker, start=start_date, end=end_date)
     return stock_data['Close']
 
+# ARIMA Model
 def arima_model(train_data):
-    model = ARIMA(train_data, order=(5, 1, 0))  # p=5, d=1, q=0 (can be fine tuned later)
+    model = ARIMA(train_data, order=(5, 1, 0))  # p=5, d=1, q=0 (you can fine-tune these values)
     model_fit = model.fit()
     forecast = model_fit.forecast(steps=30)  # Forecasting the next 30 days
     return forecast
 
+# LSTM Model
 def lstm_model(train_data, future_days=30):
     # Data scaling
     scaler = MinMaxScaler(feature_range=(0, 1))
@@ -78,11 +81,14 @@ def main():
         # LSTM Prediction
         lstm_forecast = lstm_model(train_data)
 
+        # Create the date range for the next 30 days
+        forecast_dates = pd.date_range(start=stock_data.index[-1] + pd.Timedelta(days=1), periods=30, freq='D')
+
         # Plot Results
         fig, ax = plt.subplots(1, 1, figsize=(10, 5))
-        ax.plot(stock_data.index, stock_data.values, label='Historical Prices')
-        ax.plot(pd.date_range(start=stock_data.index[-1], periods=30, freq='D'), arima_forecast, label='ARIMA Prediction')
-        ax.plot(pd.date_range(start=stock_data.index[-1], periods=30, freq='D'), lstm_forecast.flatten(), label='LSTM Prediction')
+        ax.plot(stock_data.index, stock_data.values, label='Historical Prices', color='blue')  # Actual data
+        ax.plot(forecast_dates, arima_forecast, label='ARIMA Prediction', color='green')  # ARIMA forecast
+        ax.plot(forecast_dates, lstm_forecast.flatten(), label='LSTM Prediction', color='red')  # LSTM forecast
 
         ax.set_title(f'{ticker} Price Prediction')
         ax.set_xlabel('Date')
@@ -99,4 +105,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
